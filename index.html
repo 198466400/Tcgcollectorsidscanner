@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Comps + Variant Cataloger</title>
+<style>
+:root{--bg:#f6f5f1;--fg:#1c1c1a;--mut:#6b6a64;--card:#fff;--bd:#dcdad2;--ac:#6a3df0;--ok:#16794c;--bad:#b3261e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15151a;--fg:#ecebe6;--mut:#9a98a0;--card:#1f1f26;--bd:#33333d;--ac:#9a7bff;--ok:#4cc38a;--bad:#ff8a80}}
+:root[data-theme="dark"]{--bg:#15151a;--fg:#ecebe6;--mut:#9a98a0;--card:#1f1f26;--bd:#33333d;--ac:#9a7bff;--ok:#4cc38a;--bad:#ff8a80}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0 0 2px}h2{font-size:15px;margin:0 0 8px}
+.sub{color:var(--mut);font-size:13px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px}
+label{display:block;font-size:12px;color:var(--mut);margin:8px 0 3px}
+input,textarea{width:100%;padding:9px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
+textarea{min-height:130px;font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:120px}
+button{padding:10px 14px;border:0;border-radius:8px;background:var(--ac);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+button.sec{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+button:disabled{opacity:.5}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;font-size:14px}.kv b{color:var(--mut);font-weight:500}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;border:1px solid var(--bd);font-size:12px;margin:2px 4px 2px 0}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{padding:5px 6px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:top}
+.off{opacity:.45;text-decoration:line-through}
+.big{font-size:22px;font-weight:700}.stats{display:flex;gap:14px;flex-wrap:wrap}.stats div{min-width:80px}.stats small{display:block;color:var(--mut);font-size:11px}
+ul{margin:4px 0;padding-left:18px}
+#st{color:var(--mut);font-size:13px;margin-top:8px}
+pre{white-space:pre-wrap;font-size:12px;margin:0}
+</style></head><body><main>
+<h1>Comps + Variant Cataloger</h1>
+<div class="sub">Paste sold listings. AI cleans the comps, pins the exact variant, and builds a catalog record + sleeve price.</div>
+
+<div class="card">
+<div class="row"><div><label>Card name</label><input id="nm" placeholder="Diabellstar the Black Witch"></div>
+<div><label>Set code (if on card)</label><input id="sc" placeholder="RA03-EN032"></div></div>
+<label>What you see on the card (finish, name color, foil pattern, edition stamp)</label>
+<input id="ob" placeholder="etched/layered foil, black fade with holo cutouts, 1st Ed">
+<div id="cam"><label>Card photos (up to 4): front, back, a tilted foil shot, corner/edge close-up</label>
+<div class="row"><button class="sec" id="b1" type="button">📷 Take photo</button><button class="sec" id="b2" type="button">🖼 From library</button></div>
+<input id="f1" type="file" accept="image/*" capture="environment" hidden><input id="f2" type="file" accept="image/*" multiple hidden>
+<div id="nt" class="sub" hidden style="color:var(--bad);margin:6px 0 0">Photo analysis may not be supported in this view. If the scan fails, send the photos to Claude in the chat instead.</div>
+<div id="th" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"></div></div>
+<label>Sold comps (paste title + price + date per line, from eBay sold / TCGplayer sales history)</label>
+<textarea id="cp" placeholder="Diabellstar the Black Witch RA03-EN032 Collector's Rare 1st Ed NM  $33.50  Sep 12"></textarea>
+<div class="row"><div><label>TCGplayer market price now ($)</label><input id="tp" inputmode="decimal" placeholder="optional"></div><div style="display:flex;align-items:flex-end"><button id="go" style="width:100%">Catalog + price</button></div></div>
+<div id="st"></div></div>
+
+<div id="out"></div>
+
+<div class="card" id="lc" hidden><h2>Sleeve list</h2><pre id="lt"></pre>
+<div class="row" style="margin-top:10px"><button class="sec" id="cpy">Copy</button><button class="sec" id="dl">Download .txt</button></div></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let rec=null,list=[],shots=[],maxN=4,hasImg=false;
+function addShots(fl){for(const f of fl){if(shots.length<maxN)shots.push(f)}thumbs()}
+function thumbs(){const t=$('th');t.innerHTML='';shots.forEach((f,i)=>{const d=document.createElement('div');d.style.position='relative';const im=new Image();im.src=URL.createObjectURL(f);im.style.cssText='width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--bd)';const x=document.createElement('button');x.type='button';x.textContent='×';x.style.cssText='position:absolute;top:-6px;right:-6px;padding:0 7px;border-radius:99px';x.onclick=()=>{shots.splice(i,1);thumbs()};d.append(im,x);t.append(d)})}
+$('b1').onclick=()=>$('f1').click();$('b2').onclick=()=>$('f2').click();
+$('f1').onchange=e=>{addShots(e.target.files);e.target.value=''};$('f2').onchange=e=>{addShots(e.target.files);e.target.value=''};
+(async()=>{try{const sm=await window.claude.use('sample');const l=sm&&await sm.limits();if(l&&l.images){hasImg=true;maxN=Math.min(4,l.images.maxCount||4)}else{$('nt').hidden=false}}catch(e){}})();
+const money=n=>n==null||isNaN(n)?'—':'$'+Number(n).toFixed(2);
+function stats(c){const p=c.filter(x=>x.include&&typeof x.price==='number').map(x=>x.price).sort((a,b)=>a-b);if(!p.length)return null;const n=p.length,sum=p.reduce((a,b)=>a+b,0),med=n%2?p[(n-1)/2]:(p[n/2-1]+p[n/2])/2,t=n>4?p.slice(1,-1):p;return{n,avg:sum/n,med,lo:p[0],hi:p[n-1],trim:t.reduce((a,b)=>a+b,0)/t.length}}
+function chart(c,mkt){const pts=c.filter(x=>x.include&&typeof x.price==='number');if(pts.length<1)return'';const W=640,H=180,P=34;const vals=pts.map(x=>x.price);if(mkt)vals.push(mkt);const mx=Math.max(...vals)*1.1,mn=Math.min(0,Math.min(...vals));const X=i=>P+(pts.length<2?(W-2*P)/2:i*(W-2*P)/(pts.length-1)),Y=v=>H-P/1.5-(v-mn)/(mx-mn||1)*(H-P*1.4);
+let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Sold comps chart"><line x1="${P}" y1="${H-P/1.5}" x2="${W-P/2}" y2="${H-P/1.5}" stroke="var(--bd)"/>`;
+s+=`<text x="2" y="${Y(mx/1.1)+4}" font-size="10" fill="var(--mut)">${money(mx/1.1)}</text><text x="2" y="${Y(0)+4}" font-size="10" fill="var(--mut)">$0</text>`;
+if(mkt)s+=`<line x1="${P}" x2="${W-P/2}" y1="${Y(mkt)}" y2="${Y(mkt)}" stroke="var(--ok)" stroke-dasharray="5 4"/><text x="${W-P/2}" y="${Y(mkt)-4}" font-size="10" text-anchor="end" fill="var(--ok)">TCG market ${money(mkt)}</text>`;
+s+=`<polyline fill="none" stroke="var(--ac)" stroke-width="2" points="${pts.map((x,i)=>X(i)+','+Y(x.price)).join(' ')}"/>`;
+pts.forEach((x,i)=>{s+=`<circle cx="${X(i)}" cy="${Y(x.price)}" r="4" fill="var(--ac)"><title>${esc(x.date||'')} ${money(x.price)}</title></circle>`});
+return s+'</svg>'}
+function render(){if(!rec)return;const c=rec.comps||[],mkt=parseFloat($('tp').value)||null,s=stats(c);
+const f=(k,v)=>v?`<b>${k}</b><span>${esc(v)}</span>`:'';
+const tags=a=>(a||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('');
+const li=a=>(a||[]).length?'<ul>'+a.map(t=>`<li>${esc(t)}</li>`).join('')+'</ul>':'';
+$('out').innerHTML=`<div class="card"><h2>Variant record <span class="tag">confidence: ${esc(rec.confidence||'?')}</span></h2><div class="kv">
+${f('Card',rec.card)}${f('Set',rec.set)}${f('Set code',rec.setCode)}${f('Rarity',rec.rarity)}${f('Edition',rec.edition)}${f('Variant',rec.variant)}${f('Finish',rec.finish)}${f('Foil pattern',rec.foilPattern)}${f('Art',rec.artVariant)}${f('Language',rec.language)}${f('Condition',rec.condition)}</div>
+<label>Visual identifiers</label>${li(rec.visualIdentifiers)}<label>Easily confused with</label>${tags(rec.confusableWith)}
+${(rec.collectorOptions||[]).length?`<label>Collector options (other versions of this card)</label>${li(rec.collectorOptions)}`:''}
+<label>Image-cataloging tags for TCGplayer-style listings</label>${li(rec.imageCatalogNotes)}
+${rec.notes?`<label>Notes</label><div>${esc(rec.notes)}</div>`:''}</div>
+${rec.photoReadout?`<div class="card"><h2>Camera readout</h2><div class="kv">${f('Card face',rec.photoReadout.cardFace)}${f('Set code read',rec.photoReadout.setCodeRead)}${f('Edition',rec.photoReadout.editionEvidence)}${f('Corners',(rec.photoReadout.conditionNotes||{}).corners)}${f('Edges',(rec.photoReadout.conditionNotes||{}).edges)}${f('Surface',(rec.photoReadout.conditionNotes||{}).surface)}${f('Centering',(rec.photoReadout.conditionNotes||{}).centering)}${f('Raw grade est.',rec.photoReadout.estimatedRawGrade)}</div>
+<label>Rarity evidence seen</label>${li(rec.photoReadout.rarityEvidence)}<label>Authenticity flags</label>${li(rec.photoReadout.authenticityFlags)}<label>Retake advice</label>${li(rec.photoReadout.retakeAdvice)}
+<div class="sub" style="margin:6px 0 0">Photo-based grade is a rough estimate, not a grading service result.</div></div>`:''}
+<div class="card"><h2>Sold comps (tap box to include/exclude)</h2><div class="scroll"><table><tr><th></th><th>Listing</th><th>Price</th><th>Date</th></tr>
+${c.map((x,i)=>`<tr class="${x.include?'':'off'}"><td><input type="checkbox" data-i="${i}" ${x.include?'checked':''} style="width:auto"></td><td>${esc(x.title)}${x.reason&&!x.include?`<br><small style="color:var(--bad)">${esc(x.reason)}</small>`:''}</td><td>${money(x.price)}</td><td>${esc(x.date||'')}</td></tr>`).join('')}</table></div>
+${s?`<div class="stats" style="margin-top:10px"><div><small>Median</small><span class="big">${money(s.med)}</span></div><div><small>Average</small>${money(s.avg)}</div><div><small>Trimmed</small>${money(s.trim)}</div><div><small>Low–High</small>${money(s.lo)}–${money(s.hi)}</div><div><small>Comps</small>${s.n}</div></div>`:'<div>No usable comps.</div>'}
+<div style="margin-top:8px">${chart(c,mkt)}</div></div>
+<div class="card"><h2>Sleeve price</h2><div class="row"><input id="sp" inputmode="decimal" value="${s?s.med.toFixed(2):''}"><button id="add">Add to sleeve list</button></div></div>`;
+document.querySelectorAll('input[data-i]').forEach(e=>e.onchange=()=>{rec.comps[+e.dataset.i].include=e.checked;render()});
+$('add').onclick=()=>{const p=parseFloat($('sp').value);list.push({line:[rec.card,rec.setCode,rec.rarity,rec.edition,rec.variant].filter(Boolean).join(' | ')+` | TCG market ${money(mkt)} | sold median ${s?money(s.med):'—'} | SLEEVE ${money(p)}`});showList()}}
+function showList(){$('lc').hidden=!list.length;$('lt').textContent=list.map((x,i)=>(i+1)+'. '+x.line).join('\n')}
+$('cpy').onclick=async()=>{try{await navigator.clipboard.writeText($('lt').textContent);$('cpy').textContent='Copied'}catch(e){$('cpy').textContent='Copy failed'}};
+$('dl').onclick=async()=>{try{const d=await claude.use('downloads');if(!d){$('dl').textContent='Unavailable';return}await d.save({filename:'sleeve-list.txt',data:$('lt').textContent})}catch(e){}};
+$('go').onclick=async()=>{const st=$('st');const cp=$('cp').value.trim();if(!cp&&!$('nm').value.trim()&&!shots.length){st.textContent='Add a photo, card name, or comps first.';return}
+let sample=null;try{sample=await window.claude.use('sample');if(shots.length&&!hasImg){const l=await sample.limits();hasImg=!!(l&&l.images)}}catch(e){}
+if(shots.length&&!hasImg){st.textContent='This view can\'t send photos to the AI. Send the photos to Claude in the chat, or clear them to run comps only.';return}
+if(!sample){st.textContent='AI cataloger is unavailable in this view.';return}
+$('go').disabled=true;st.textContent='Cataloging… (can take up to a minute)';
+const prompt=`You are a trading card variant/rarity cataloger and sold-comps cleaner. Respond with ONLY JSON, no markdown.
+Card: ${$('nm').value}\nSet code: ${$('sc').value}\nOwner's observations of the physical card: ${$('ob').value}\nPasted sold comps:\n${cp||'(none)'}\nPhotos attached: ${shots.length} (order unknown; work out which is front, back, or close-up). If photos are attached, read the card itself: printed name, set code, edition stamp, copyright line, name-foil color, foil texture/pattern, art box finish, and judge rarity from that evidence, not just the owner's notes. State what the photos cannot settle and which extra shot would.
+Rules: Use only the pasted comps for prices; never invent comps or prices. Identify the exact variant the owner most likely holds from the code + observations; if ambiguous, say so and list alternatives in confusableWith and set confidence low. For each comp set include=false (with a short reason) if it is a different rarity/variant/edition/language, a graded slab, a lot/bundle, a proxy, or a price outlier; otherwise true. Parse price as a number in USD and date as YYYY-MM-DD or null.
+Schema: {"card":str,"set":str,"setCode":str,"rarity":str,"edition":str,"variant":str,"finish":str,"foilPattern":str,"artVariant":str,"language":str,"condition":str,"confidence":"low|medium|high","visualIdentifiers":[str],"confusableWith":[str],"imageCatalogNotes":[str],"notes":str,"collectorOptions":[str],"photoReadout":{"cardFace":str,"setCodeRead":str,"rarityEvidence":[str],"editionEvidence":str,"conditionNotes":{"corners":str,"edges":str,"surface":str,"centering":str},"estimatedRawGrade":str,"authenticityFlags":[str],"retakeAdvice":[str]}|null,"comps":[{"title":str,"price":num,"date":str|null,"include":bool,"reason":str}]}
+collectorOptions = other rarities/printings/alt arts/languages/stamped promos of this same card and what distinguishes each. photoReadout is null when no photos. authenticityFlags: list only visible concerns (font, foil, color, borders), say "none visible" otherwise, never claim certainty. imageCatalogNotes = concrete photo/tag guidance a marketplace could use to tell this variant apart (name-foil color, texture, stamp location, angle/lighting to photograph).`;
+try{rec=await sample.json(prompt,hasImg&&shots.length?{cache:false,images:shots,modelTier:'complex'}:{cache:false});render();st.textContent=''}catch(e){st.textContent='Failed: '+(e&&e.message||e.code||'error')}
+$('go').disabled=false};
+</script></body></html>
